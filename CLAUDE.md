@@ -1,6 +1,6 @@
 # 开发指引
 
-这个仓库把龙芯 Loongnix 桌面 25 的公开 apt 源变成可用于软件构建与测试的容器镜像。只发**新世界**（deb 架构名 `loong64`）；旧世界的 20 线配置留在 `distros/v20.conf` 但构建不出来，卡在 QEMU 对旧世界信号 ABI 的支持缺失，详见 README「旧世界为什么构建不出来」。定位边界见 README 前两节。
+这个仓库把龙芯 Loongnix 桌面 25 的公开 apt 源变成可用于软件构建与测试的容器镜像。只发**新世界**（deb 架构名 `loong64`）；旧世界的 20 线做不出来，卡点与逐层排查记在 `buildkit/docs/downstream-repo.md`。定位边界见 README 前两节。
 
 ## 硬性约定
 
@@ -14,7 +14,7 @@
 ```
 loongnix/
 ├── buildkit/                          # submodule，钉住一个 commit
-├── distros/v25.conf  v20.conf         # 一个版本一个，文件名即 DID
+├── distros/v25.conf                   # 一个版本一个，文件名即 DID
 ├── keys/loongnix-archive-keyring.gpg  # 信任根，指纹钉在 conf 里
 ├── .github/workflows/build.yml        # 只定义矩阵，调用 buildkit 的可复用 workflow
 ├── README.md
@@ -28,8 +28,7 @@ loongnix/
 
 - **全线只有 LoongArch，没有 amd64/arm64。** 两条桌面线每个 suite 的 `Release` 都核过：25 线四个 suite 全是 `loong64`，20 线八个 suite 全是 `loongarch64`；服务器线（rpm 系）的架构目录也只有 `loongarch64` 与 `source`
 - **世代判据落在动态链接器上，不在架构名上。** `/lib64/ld-linux-loongarch-lp64d.so.1` 是新世界，`/lib64/ld.so.1` 是旧世界。deb 世界里 `loong64` = 新、`loongarch64` = 旧，但 rpm 世界两个世界都叫 `loongarch64`，名字不携带世代信息
-- **旧世界构建不出来，卡在信号 ABI。** QEMU ≥ 9 补了 stat 那两个系统调用（8.2.2 报 `Unknown syscall 80`），所以旧世界的 `bash` 能跑；但 `rt_sigaction` 在旧世界下**全部返回 EINVAL**，而 dpkg 跑维护者脚本前必须 `signal(SIGQUIT, SIG_IGN)`，拿到 EINVAL 就中止。**「能执行」与「能装包」是两个命题**——`busybox` 打得出 `trap "" QUIT; echo ok` 只因为它不检查返回值。要做旧世界得用龙芯补丁版 QEMU 或真机
-- **`arch-test` 不认识 `loongarch64` 这个名字**（只有 `loong64` 的 helper），所以 mmdebstrap 报的 `can neither be executed natively nor via qemu user emulation` 与 binfmt 配得对不对无关——它问的是「我认不认识这个名字」。`build.sh` 对这个架构用 `--skip=check/qemu` 绕过
+- **旧世界（`loongarch64`）做不出来**，卡在 QEMU 对旧世界信号 ABI 的支持缺失。别再花时间修 binfmt——逐层排查结论见 `buildkit/docs/downstream-repo.md`
 - **mmdebstrap 的可执行性判据只看 `update-binfmts --display`**，不看 `/proc`、也不做实际 exec。直写 `/proc` 的注册它看不见，于是即使 `chroot` 里明明能跑，它仍报「can neither be executed natively nor via qemu user emulation」——那句话读起来像 binfmt 没装。而 Ubuntu 24.04 的 `qemu-user-static` **不给 loongarch64 提供定义文件**，所以只能用 `update-binfmts --install` 自己建条目
 - **验旧世界必须先做阴性对照。** 带 `F` 标志的 binfmt 注册内核会持有解释器文件、跨容器存活，所以「重起一个容器」不是干净环境；不先确认基线跑不起来，后面的成功可能来自残留注册
 - **multiarch 三元组是 `loongarch64-linux-gnu`,而 deb 架构名是 `loong64`**，两者不同名，`lib/arch.sh` 已做映射

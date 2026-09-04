@@ -14,10 +14,6 @@ on:
         description: "测试全绿后发布到 GHCR（默认不发布）"
         type: boolean
         default: false
-      include-oldworld:
-        description: "把 20 线（旧世界）一并构建。**当前跑不通**，理由见 README；配置留着备用"
-        type: boolean
-        default: false
 
 permissions:
   contents: read
@@ -34,7 +30,7 @@ jobs:
       fail-fast: false
       matrix:
         tier: [micro, base, devel]
-    uses: distrotwin/buildkit/.github/workflows/build-one.yml@eee857a14f395a81c6b1a05c6b03da92fff3be8b
+    uses: distrotwin/buildkit/.github/workflows/build-one.yml@a37af53f7df9ec862ddec7ee2b916b8fedeb6298
     with:
       distro-id:  v25
       arch:       loong64
@@ -46,30 +42,6 @@ jobs:
       timeout-minutes: 150
       max-attempts: 2
 
-  # ── 20 线：旧世界 loongarch64 ────────────────────────────────────────────────
-  # 与 25 线是两套互不兼容的 ABI，所以是独立的架构（loongarch64 对 loong64），
-  # 发布时也走各自的平台名 —— 实测 docker 与 GHCR 都把这两个字符串当独立平台，
-  # 推上去再回读一致，不会互相污染。
-  #
-  # 旧世界要求 QEMU ≥ 9：它的 glibc 2.28 仍在调 syscall 79/80，而 Ubuntu 24.04
-  # 自带的 8.2.2 没实现，症状是 Unknown syscall 80 / ENOSYS。build-one 与 test-one
-  # 会按目标架构调 tools/ensure-qemu.sh 换成钉住校验和的 QEMU 10。
-  build-old:
-    if: inputs.include-oldworld
-    strategy:
-      fail-fast: false
-      matrix:
-        tier: [micro, base, devel]
-    uses: distrotwin/buildkit/.github/workflows/build-one.yml@eee857a14f395a81c6b1a05c6b03da92fff3be8b
-    with:
-      distro-id:  v20
-      arch:       loongarch64
-      tier:       ${{ matrix.tier }}
-      runner:     ubuntu-24.04
-      needs-qemu: true
-      timeout-minutes: 150
-      max-attempts: 2
-
   test:
     needs: [build]
     if: always()
@@ -77,7 +49,7 @@ jobs:
       fail-fast: false
       matrix:
         tier: [micro, base, devel]
-    uses: distrotwin/buildkit/.github/workflows/test-one.yml@eee857a14f395a81c6b1a05c6b03da92fff3be8b
+    uses: distrotwin/buildkit/.github/workflows/test-one.yml@a37af53f7df9ec862ddec7ee2b916b8fedeb6298
     with:
       distro-id:  v25
       arch:       loong64
@@ -85,35 +57,20 @@ jobs:
       runner:     ubuntu-24.04   # 同上：22.04 的 QEMU 6.2 不支持 LoongArch
       needs-qemu: true           # 测试阶段也要 docker run 被测镜像，binfmt 两个阶段各需一次
 
-  test-old:
-    needs: [build-old]
-    if: always() && inputs.include-oldworld
-    strategy:
-      fail-fast: false
-      matrix:
-        tier: [micro, base, devel]
-    uses: distrotwin/buildkit/.github/workflows/test-one.yml@eee857a14f395a81c6b1a05c6b03da92fff3be8b
-    with:
-      distro-id:  v20
-      arch:       loongarch64
-      tier:       ${{ matrix.tier }}
-      runner:     ubuntu-24.04
-      needs-qemu: true
-
   # expected 是结构性守卫：某个 job 在跑到检查前就挂掉不会产出结果，检查总数会
   # 「合法地」变低而基线放过它，结果数对不上则一定抓得住。
   # 首轮按 3 份与保守基线跑，绿了之后按实际结果对齐（制度第 9 步）。
   report:
-    needs: [test, test-old]
+    needs: [test]
     if: always()
-    uses: distrotwin/buildkit/.github/workflows/report.yml@eee857a14f395a81c6b1a05c6b03da92fff3be8b
+    uses: distrotwin/buildkit/.github/workflows/report.yml@a37af53f7df9ec862ddec7ee2b916b8fedeb6298
     with:
-      distros:  ${{ inputs.include-oldworld && '["v25","v20"]' || '["v25"]' }}
+      distros:  '["v25"]'
       # 实测：3 份结果、119 项通过、零异常。本地 verify 报 122 是把每个镜像那条
       # 「不适用」的 gate_low 也计进了总数，而报告只数通过项，所以 119 = 122 - 3。
       # 基线取略低于实测的地板，掉下去说明有检查消失了。
-      expected: ${{ inputs.include-oldworld && 6 || 3 }}
-      baseline: ${{ inputs.include-oldworld && 225 || 115 }}
+      expected: 3
+      baseline: 115
 
   # 两条线各自发布，平台名分开：新世界 loong64、旧世界 loongarch64。
   # 不合并成一个 manifest —— 那样 loong64 这个平台名会指向两套不兼容的 ABI，
@@ -129,7 +86,7 @@ jobs:
           - { tier: micro, latest: false }
           - { tier: base,  latest: false }
           - { tier: devel, latest: true }
-    uses: distrotwin/buildkit/.github/workflows/publish-one.yml@eee857a14f395a81c6b1a05c6b03da92fff3be8b
+    uses: distrotwin/buildkit/.github/workflows/publish-one.yml@a37af53f7df9ec862ddec7ee2b916b8fedeb6298
     with:
       distro-id:  v25
       tier:       ${{ matrix.tier }}
@@ -137,20 +94,3 @@ jobs:
       tag-prefix: v25
       arches:     loong64
       latest:     ${{ matrix.latest }}
-
-  # 旧世界单独一组。latest 归 25 线（它是在维护的那一条），所以这里一律 false。
-  publish-old:
-    needs: [test-old, report]
-    if: inputs.publish && inputs.include-oldworld && needs.test-old.result == 'success' && needs.report.result == 'success'
-    strategy:
-      fail-fast: false
-      matrix:
-        tier: [micro, base, devel]
-    uses: distrotwin/buildkit/.github/workflows/publish-one.yml@eee857a14f395a81c6b1a05c6b03da92fff3be8b
-    with:
-      distro-id:  v20
-      tier:       ${{ matrix.tier }}
-      image:      loongnix
-      tag-prefix: v20
-      arches:     loongarch64
-      latest:     false
