@@ -3,9 +3,11 @@
 对着龙芯 Loongnix 桌面 25 的公开 apt 源自举出来的容器环境，用于**软件构建、打包与兼容性测试**。只覆盖 **LoongArch 新世界 ABI**，公开在 GHCR。最近一轮 3 个镜像、119 项检查全部通过，零异常。
 
 ```bash
-docker run --rm ghcr.io/distrotwin/loongnix:v25-devel \
+docker run --rm --platform linux/loong64 ghcr.io/distrotwin/loongnix:v25-devel \
   bash -c 'grep PRETTY /etc/os-release; ldd --version | head -1; gcc -dumpfullversion'
 ```
+
+在 x86 机器上**必须带 `--platform linux/loong64`**：这个仓库的 manifest 里只有一个架构，docker 默认按宿主平台挑，挑不到就报 `no matching manifest for linux/amd64`——那句话读起来像镜像坏了，其实是没告诉 docker 要哪个平台。宿主还需要 `qemu-user-static` 与 `binfmt-support`，且 QEMU 不低于 7.1。
 
 ## 这是什么，不是什么
 
@@ -22,7 +24,7 @@ docker run --rm ghcr.io/distrotwin/loongnix:v25-devel \
 进容器，写个 A+B，编了跑，再看符号天花板。
 
 ```bash
-docker run -it --rm ghcr.io/distrotwin/loongnix:v25-devel /bin/bash
+docker run -it --rm --platform linux/loong64 ghcr.io/distrotwin/loongnix:v25-devel /bin/bash
 ```
 
 ```bash
@@ -35,8 +37,6 @@ objdump -T ab | grep -oE 'GLIBC_[0-9.]+' | sort -uV | tail -1
 ```
 
 最后那行是这套镜像最有用的一句：**它直接告诉你产物需要目标系统多新的 glibc**。
-
-在 x86 上跑它需要宿主装 `qemu-user-static` 与 `binfmt-support`，且 QEMU 不低于 7.1。
 
 ## 选哪一个
 
@@ -64,7 +64,8 @@ LoongArch 有两套互不兼容的 ABI，Loongnix 的两条桌面线各用一套
 **世代不能靠架构名判。** deb 世界里 `loong64` 是新世界、`loongarch64` 是旧世界,而 **rpm 世界两个世界都叫 `loongarch64`**,名字不携带世代信息。想确认手上的镜像是哪个世界,看动态链接器:
 
 ```bash
-docker run --rm ghcr.io/distrotwin/loongnix:v25-micro readlink -f /lib64/ld-linux-loongarch-lp64d.so.1
+docker run --rm --platform linux/loong64 ghcr.io/distrotwin/loongnix:v25-micro \
+  readlink -f /lib64/ld-linux-loongarch-lp64d.so.1
 ```
 
 ## 一个容易踩的陷阱
