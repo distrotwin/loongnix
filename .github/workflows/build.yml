@@ -30,7 +30,7 @@ jobs:
       fail-fast: false
       matrix:
         tier: [micro, base, devel]
-    uses: distrotwin/buildkit/.github/workflows/build-one.yml@359ccccaa673bf89b581388ef44fa1ffaad529ea
+    uses: distrotwin/buildkit/.github/workflows/build-one.yml@5c56a4a7e4e2b068ba30fa2892497fd168254294
     with:
       distro-id:  v25
       arch:       loong64
@@ -49,7 +49,7 @@ jobs:
       fail-fast: false
       matrix:
         tier: [micro, base, devel]
-    uses: distrotwin/buildkit/.github/workflows/test-one.yml@359ccccaa673bf89b581388ef44fa1ffaad529ea
+    uses: distrotwin/buildkit/.github/workflows/test-one.yml@5c56a4a7e4e2b068ba30fa2892497fd168254294
     with:
       distro-id:  v25
       arch:       loong64
@@ -63,7 +63,7 @@ jobs:
   report:
     needs: [test]
     if: always()
-    uses: distrotwin/buildkit/.github/workflows/report.yml@359ccccaa673bf89b581388ef44fa1ffaad529ea
+    uses: distrotwin/buildkit/.github/workflows/report.yml@5c56a4a7e4e2b068ba30fa2892497fd168254294
     with:
       distros:  '["v25"]'
       # 实测：3 份结果、119 项通过、零异常。本地 verify 报 122 是把每个镜像那条
@@ -82,7 +82,7 @@ jobs:
           - { tier: micro, latest: false }
           - { tier: base,  latest: false }
           - { tier: devel, latest: true }
-    uses: distrotwin/buildkit/.github/workflows/publish-one.yml@359ccccaa673bf89b581388ef44fa1ffaad529ea
+    uses: distrotwin/buildkit/.github/workflows/publish-one.yml@5c56a4a7e4e2b068ba30fa2892497fd168254294
     with:
       distro-id:  v25
       tier:       ${{ matrix.tier }}
