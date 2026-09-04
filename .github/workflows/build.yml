@@ -64,7 +64,7 @@ jobs:
     with:
       distro-id:  v20
       arch:       loongarch64
-      tier:       \${{ matrix.tier }}
+      tier:       ${{ matrix.tier }}
       runner:     ubuntu-24.04
       needs-qemu: true
       timeout-minutes: 150
@@ -96,7 +96,7 @@ jobs:
     with:
       distro-id:  v20
       arch:       loongarch64
-      tier:       \${{ matrix.tier }}
+      tier:       ${{ matrix.tier }}
       runner:     ubuntu-24.04
       needs-qemu: true
 
@@ -108,13 +108,17 @@ jobs:
     if: always()
     uses: distrotwin/buildkit/.github/workflows/report.yml@f527e01da2aea0879e6929c674b28a2852d87ff5
     with:
-      distros:  \${{ inputs.include-oldworld && '["v25","v20"]' || '["v25"]' }}
+      distros:  ${{ inputs.include-oldworld && '["v25","v20"]' || '["v25"]' }}
       # 实测：3 份结果、119 项通过、零异常。本地 verify 报 122 是把每个镜像那条
       # 「不适用」的 gate_low 也计进了总数，而报告只数通过项，所以 119 = 122 - 3。
       # 基线取略低于实测的地板，掉下去说明有检查消失了。
-      expected: \${{ inputs.include-oldworld && 6 || 3 }}
-      baseline: \${{ inputs.include-oldworld && 225 || 115 }}
+      expected: ${{ inputs.include-oldworld && 6 || 3 }}
+      baseline: ${{ inputs.include-oldworld && 225 || 115 }}
 
+  # 两条线各自发布，平台名分开：新世界 loong64、旧世界 loongarch64。
+  # 不合并成一个 manifest —— 那样 loong64 这个平台名会指向两套不兼容的 ABI，
+  # 新世界机器可能拉到跑不了的旧世界镜像。实测这两个字符串在 docker 与 GHCR 里
+  # 是独立标识，推上去回读一致。
   publish:
     needs: [test, report]
     if: inputs.publish && needs.test.result == 'success' && needs.report.result == 'success'
@@ -133,3 +137,20 @@ jobs:
       tag-prefix: v25
       arches:     loong64
       latest:     ${{ matrix.latest }}
+
+  # 旧世界单独一组。latest 归 25 线（它是在维护的那一条），所以这里一律 false。
+  publish-old:
+    needs: [test-old, report]
+    if: inputs.publish && inputs.include-oldworld && needs.test-old.result == 'success' && needs.report.result == 'success'
+    strategy:
+      fail-fast: false
+      matrix:
+        tier: [micro, base, devel]
+    uses: distrotwin/buildkit/.github/workflows/publish-one.yml@f527e01da2aea0879e6929c674b28a2852d87ff5
+    with:
+      distro-id:  v20
+      tier:       ${{ matrix.tier }}
+      image:      loongnix
+      tag-prefix: v20
+      arches:     loongarch64
+      latest:     false
