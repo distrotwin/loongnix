@@ -15,9 +15,9 @@ on:
         type: boolean
         default: false
       include-oldworld:
-        description: "把 20 线（旧世界 loongarch64）一并构建。需要 QEMU ≥ 9，构建前会换版"
+        description: "把 20 线（旧世界）一并构建。**当前跑不通**，理由见 README；配置留着备用"
         type: boolean
-        default: true
+        default: false
 
 permissions:
   contents: read

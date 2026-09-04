@@ -1,6 +1,6 @@
 # 龙芯 Loongnix 桌面操作系统 · 构建与测试镜像
 
-对着龙芯 Loongnix 桌面版的公开 apt 源自举出来的容器环境，用于**软件构建、打包与兼容性测试**。覆盖 LoongArch 的**两套 ABI**——25 线是新世界 `loong64`，20 线是旧世界 `loongarch64`——公开在 GHCR。最近一轮 3 个镜像、119 项检查全部通过，零异常。
+对着龙芯 Loongnix 桌面 25 的公开 apt 源自举出来的容器环境，用于**软件构建、打包与兼容性测试**。只覆盖 **LoongArch 新世界 ABI**（`loong64`）——旧世界的 20 线构建不出来，理由见下文——公开在 GHCR。最近一轮 3 个镜像、119 项检查全部通过，零异常。
 
 ```bash
 docker run --rm --platform linux/loong64 ghcr.io/distrotwin/loongnix:v25-devel \
@@ -43,48 +43,61 @@ objdump -T ab | grep -oE 'GLIBC_[0-9.]+' | sort -uV | tail -1
 | 版本 | glibc | gcc | libstdc++ | 架构 |
 |---|---|---|---|---|
 | `v25` | **2.41** | **14.2.0** | 6.0.33 / `GLIBCXX_3.4.33` | `loong64`（新世界） |
-| `v20` | **2.28** | 8.3.0 | 6.0.25 / `GLIBCXX_3.4.25` | `loongarch64`（旧世界） |
 
 三个档位：`micro` 只有 libc 与 shell，不带包管理器；`base` 加上 `apt`、`python3`、网络工具；`devel` 再加 `build-essential`、`pkg-config`。
 
-`v25` 是四个仓库里 ABI 最新的一个——银河麒麟 V11、统信 V25、麒麟信安 V6 都停在 glibc 2.38。`v20`（稻香湖 DaoXiangHu）是上一代,Debian 10 血统,给存量的旧世界机器用。
+这是四个仓库里 ABI 最新的一个——银河麒麟 V11、统信 V25、麒麟信安 V6 都停在 glibc 2.38。
 
-## 两条线，两套互不兼容的 ABI
+## 两条线，只有新世界做得出来
 
-LoongArch 有两套 ABI，Loongnix 的两条桌面线各用一套，**本仓库两条都做**，但作为**两个独立的架构**发布：
+LoongArch 有两套互不兼容的 ABI，Loongnix 的两条桌面线各用一套。**本仓库只发 25 线（新世界）**，20 线的配置留在 `distros/v20.conf` 里但默认不构建，原因在下一节。
 
-| 版本 | `Release` 的 `Architectures` | 动态链接器 | 世代 | OCI 平台名 |
+| 版本 | `Release` 的 `Architectures` | 动态链接器 | 世代 | 发布状态 |
 |---|---|---|---|---|
-| `v25` | `loong64` | `/lib64/ld-linux-loongarch-lp64d.so.1` | 新世界 | `linux/loong64` |
-| `v20` | `loongarch64` | `/lib64/ld.so.1` | 旧世界 | `linux/loongarch64` |
-
-**它们不在同一个 manifest 里，因此不会互相污染。** `docker pull --platform linux/loong64` 只会拿到新世界的，反之亦然。这一点是实测过的：两个平台字符串推到 GHCR 再回读都保持原样，是独立标识。
+| `v25` | `loong64` | `/lib64/ld-linux-loongarch-lp64d.so.1` | 新世界 | **已发布** |
+| `v20` | `loongarch64` | `/lib64/ld.so.1` | 旧世界 | 构建不出来 |
 
 **世代不能靠架构名判。** deb 世界里 `loong64` 是新、`loongarch64` 是旧，而 **rpm 世界两个世界都叫 `loongarch64`**，名字不携带世代信息。想确认手上的镜像是哪个世界，看动态链接器：
 
 ```bash
-# 新世界
 docker run --rm --platform linux/loong64 ghcr.io/distrotwin/loongnix:v25-micro \
   readlink -f /lib64/ld-linux-loongarch-lp64d.so.1
-# 旧世界
-docker run --rm --platform linux/loongarch64 ghcr.io/distrotwin/loongnix:v20-micro \
-  readlink -f /lib64/ld.so.1
 ```
 
-## 旧世界需要 QEMU ≥ 9
+## 旧世界为什么构建不出来
 
-在 x86 上跑旧世界镜像，宿主的 QEMU **不能低于 9**。旧世界的 glibc 2.28 仍在调用 syscall 79/80，而上游 QEMU 直到 9.x 才实现它们；用 8.x 的表现是：
+卡在 **QEMU 用户态模拟对旧世界的信号 ABI 支持缺失**上，这一层不是配置能绕的。
+
+前面几层都是通的，为免后人重走一遍，逐层记下来：
+
+| 层 | 结论 |
+|---|---|
+| 简单二进制能否执行 | **能**。QEMU 10.0.11 下旧世界 `bash` 正常跑出 `MACHTYPE=loongarch64-unknown-linux-gnu`；QEMU 8.2.2 不行，报 `Unknown syscall 80`（上游 9.x 才补上 stat 那两个调用） |
+| binfmt 能否配对 | **能**。内核侧与 `update-binfmts` 侧都可指向 QEMU 10。注意两件事：Ubuntu 24.04 的 `qemu-user-static` **不给 loongarch64 提供 `update-binfmts` 定义文件**，只能用 `--install` 自己建条目；而 builder 容器有独立的 `/var/lib/binfmts`，宿主注册好不等于容器里查得到 |
+| mmdebstrap 能否放行 | **能**，但要显式关掉一道预检。它用 `arch-test <arch>` 判可执行性，而 `arch-test` 只有 `loong64` 那一份 helper，对 `loongarch64` 回答的是 `I don't know how to detect arch 'loongarch64', sorry.`——它回答的不是「能不能执行」而是「我认不认识这个名字」。用官方支持的 `--skip=check/qemu` 绕过 |
+| **装包能否完成** | **不能** |
+
+最后一层的实证。同一个 QEMU 10，同样的操作：
 
 ```
-qemu: Unknown syscall 80
-/bin/bash: error while loading shared libraries: cannot stat shared object: Error 38
+旧世界:  rt_sigaction(SIGQUIT, ...) = -1 errno=22 (Invalid argument)
+         rt_sigaction(SIGCHLD, ...) = -1 errno=22
+新世界:  rt_sigaction(SIGQUIT, ...) = 0
 ```
 
-`Error 38` 是 ENOSYS。这句报错读起来像镜像坏了或库缺了，实际是宿主的模拟器不认那两个系统调用。Ubuntu 24.04 与 22.04 自带的都是 8.2.2 或更旧，装 `qemu-user-static` 解决不了——得换更新的版本。
+dpkg 在跑维护者脚本之前必须 `signal(SIGQUIT, SIG_IGN)`，拿到 EINVAL 就中止：
 
-新世界不受此限，8.2 起就能跑。
+```
+dpkg: unrecoverable fatal error, aborting:
+ unable to ignore signal Quit before running new libc6:loongarch64
+ package pre-installation script: Invalid argument
+```
 
-本仓库的 CI 因此在构建与测试两个阶段都会先跑 `buildkit/tools/ensure-qemu.sh`：按目标架构判断要不要换版，换的是一个钉住 sha256 的 static-pie 二进制，换完之后核对 `/proc` 与 `update-binfmts` 两侧都达标——**mmdebstrap 的可执行性判据只看后者**，两侧不一致时它会报「can neither be executed natively nor via qemu user emulation」，那句话读起来像 binfmt 没装。
+**「能执行」与「能装包」是两个不同的命题。** 旧世界的 `busybox` 打得出 `trap "" QUIT; echo ok`——因为它不检查 `rt_sigaction` 的返回值；dpkg 检查了。所以拿 `echo` 验可执行性会得到过于乐观的结论。
+
+根因是旧世界内核有自己的 `sigaction` 结构体布局，与上游不同。上游 QEMU 补了 stat 那两个系统调用，没补信号那一套。要做出旧世界镜像，得用龙芯补丁版 QEMU 或者真机。
+
+配置侧已经齐了——源可达、`InRelease` 可验、种子包逐个核过、基线从包里实读。将来上游补上信号支持，把 `include-oldworld` 打开即可。
 
 
 ## 一个容易踩的陷阱
