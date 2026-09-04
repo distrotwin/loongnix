@@ -34,7 +34,7 @@ jobs:
       fail-fast: false
       matrix:
         tier: [micro, base, devel]
-    uses: distrotwin/buildkit/.github/workflows/build-one.yml@30f363a4791687d54257fe118728390a708f6d7f
+    uses: distrotwin/buildkit/.github/workflows/build-one.yml@73873553e4e388e8012e645a5fda5ecf5ac808c4
     with:
       distro-id:  v25
       arch:       loong64
@@ -60,7 +60,7 @@ jobs:
       fail-fast: false
       matrix:
         tier: [micro, base, devel]
-    uses: distrotwin/buildkit/.github/workflows/build-one.yml@30f363a4791687d54257fe118728390a708f6d7f
+    uses: distrotwin/buildkit/.github/workflows/build-one.yml@73873553e4e388e8012e645a5fda5ecf5ac808c4
     with:
       distro-id:  v20
       arch:       loongarch64
@@ -77,7 +77,7 @@ jobs:
       fail-fast: false
       matrix:
         tier: [micro, base, devel]
-    uses: distrotwin/buildkit/.github/workflows/test-one.yml@30f363a4791687d54257fe118728390a708f6d7f
+    uses: distrotwin/buildkit/.github/workflows/test-one.yml@73873553e4e388e8012e645a5fda5ecf5ac808c4
     with:
       distro-id:  v25
       arch:       loong64
@@ -92,7 +92,7 @@ jobs:
       fail-fast: false
       matrix:
         tier: [micro, base, devel]
-    uses: distrotwin/buildkit/.github/workflows/test-one.yml@30f363a4791687d54257fe118728390a708f6d7f
+    uses: distrotwin/buildkit/.github/workflows/test-one.yml@73873553e4e388e8012e645a5fda5ecf5ac808c4
     with:
       distro-id:  v20
       arch:       loongarch64
@@ -106,7 +106,7 @@ jobs:
   report:
     needs: [test, test-old]
     if: always()
-    uses: distrotwin/buildkit/.github/workflows/report.yml@30f363a4791687d54257fe118728390a708f6d7f
+    uses: distrotwin/buildkit/.github/workflows/report.yml@73873553e4e388e8012e645a5fda5ecf5ac808c4
     with:
       distros:  ${{ inputs.include-oldworld && '["v25","v20"]' || '["v25"]' }}
       # 实测：3 份结果、119 项通过、零异常。本地 verify 报 122 是把每个镜像那条
@@ -129,7 +129,7 @@ jobs:
           - { tier: micro, latest: false }
           - { tier: base,  latest: false }
           - { tier: devel, latest: true }
-    uses: distrotwin/buildkit/.github/workflows/publish-one.yml@30f363a4791687d54257fe118728390a708f6d7f
+    uses: distrotwin/buildkit/.github/workflows/publish-one.yml@73873553e4e388e8012e645a5fda5ecf5ac808c4
     with:
       distro-id:  v25
       tier:       ${{ matrix.tier }}
@@ -146,7 +146,7 @@ jobs:
       fail-fast: false
       matrix:
         tier: [micro, base, devel]
-    uses: distrotwin/buildkit/.github/workflows/publish-one.yml@30f363a4791687d54257fe118728390a708f6d7f
+    uses: distrotwin/buildkit/.github/workflows/publish-one.yml@73873553e4e388e8012e645a5fda5ecf5ac808c4
     with:
       distro-id:  v20
       tier:       ${{ matrix.tier }}
