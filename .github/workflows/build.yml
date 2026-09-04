@@ -66,8 +66,11 @@ jobs:
     uses: distrotwin/buildkit/.github/workflows/report.yml@359ccccaa673bf89b581388ef44fa1ffaad529ea
     with:
       distros:  '["v25"]'
+      # 实测：3 份结果、119 项通过、零异常。本地 verify 报 122 是把每个镜像那条
+      # 「不适用」的 gate_low 也计进了总数，而报告只数通过项，所以 119 = 122 - 3。
+      # 基线取略低于实测的地板，掉下去说明有检查消失了。
       expected: 3
-      baseline: 105
+      baseline: 115
 
   publish:
     needs: [test, report]

@@ -1,6 +1,6 @@
 # 龙芯 Loongnix 桌面操作系统 · 构建与测试镜像
 
-对着龙芯 Loongnix 桌面 25 的公开 apt 源自举出来的容器环境，用于**软件构建、打包与兼容性测试**。只覆盖 **LoongArch 新世界 ABI**，公开在 GHCR。
+对着龙芯 Loongnix 桌面 25 的公开 apt 源自举出来的容器环境，用于**软件构建、打包与兼容性测试**。只覆盖 **LoongArch 新世界 ABI**，公开在 GHCR。最近一轮 3 个镜像、119 项检查全部通过，零异常。
 
 ```bash
 docker run --rm ghcr.io/distrotwin/loongnix:v25-devel \
@@ -125,7 +125,7 @@ docker run --rm --privileged -v "$PWD:/w" \
 
 `gh workflow run build.yml --repo distrotwin/loongnix -f publish=true`
 
-构建、测试、报告、发布四个阶段。测试在**干净机器**上装载并真正启动镜像——构建阶段的机器状态会掩盖镜像自身的缺陷。三个档位全在 QEMU 下跑，一轮比其他仓库慢得多。
+构建、测试、报告、发布四个阶段。测试在**干净机器**上装载并真正启动镜像——构建阶段的机器状态会掩盖镜像自身的缺陷。三个档位全在 QEMU 下跑，一轮比其他仓库慢得多。最近一轮 3 个镜像、119 项检查：全部通过、零异常。报告与完整日志在每次 run 的 artifact 里。
 
 ## 仓库结构
 
