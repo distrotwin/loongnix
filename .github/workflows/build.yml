@@ -1,0 +1,89 @@
+name: 构建镜像
+
+# 下游仓库唯一的 workflow：只定义矩阵、调用 buildkit 的可复用 workflow。
+# 改动前先读 buildkit/docs/downstream-repo.md 第四节。
+#
+# 这个仓库与其他三个的形状不同：**只有一个架构，而且没有托管 runner**。
+# Loongnix 全线只有 LoongArch（实测每个 suite 的 Release 里 Architectures 字段：
+# 25 线四个 suite 都是 loong64，20 线八个 suite 都是 loongarch64），所以不存在
+# amd64/arm64 矩阵，三个档位全部靠 QEMU 用户态模拟。
+on:
+  workflow_dispatch:
+    inputs:
+      publish:
+        description: "测试全绿后发布到 GHCR（默认不发布）"
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
+  packages: write
+
+jobs:
+  # LoongArch 没有托管 runner，只能在 amd64 上模拟。
+  # runner 必须 24.04：LoongArch 的用户态模拟是 QEMU 7.1 才加的，Ubuntu 22.04 只带
+  # 6.2，binfmt 里根本没有 qemu-loongarch64 条目。实测报错是「can neither be
+  # executed natively nor via qemu user emulation」，那句话不提版本，很容易被当成
+  # binfmt 没装。产物是 loong64 的，与宿主发行版新旧无关。
+  build:
+    strategy:
+      fail-fast: false
+      matrix:
+        tier: [micro, base, devel]
+    uses: distrotwin/buildkit/.github/workflows/build-one.yml@359ccccaa673bf89b581388ef44fa1ffaad529ea
+    with:
+      distro-id:  v25
+      arch:       loong64
+      tier:       ${{ matrix.tier }}
+      runner:     ubuntu-24.04
+      needs-qemu: true
+      # 模拟构建慢得多，devel 带 build-essential 更重。150 × 2 留在单 job 的
+      # 6 小时上限内。
+      timeout-minutes: 150
+      max-attempts: 2
+
+  test:
+    needs: [build]
+    if: always()
+    strategy:
+      fail-fast: false
+      matrix:
+        tier: [micro, base, devel]
+    uses: distrotwin/buildkit/.github/workflows/test-one.yml@359ccccaa673bf89b581388ef44fa1ffaad529ea
+    with:
+      distro-id:  v25
+      arch:       loong64
+      tier:       ${{ matrix.tier }}
+      runner:     ubuntu-24.04   # 同上：22.04 的 QEMU 6.2 不支持 LoongArch
+      needs-qemu: true           # 测试阶段也要 docker run 被测镜像，binfmt 两个阶段各需一次
+
+  # expected 是结构性守卫：某个 job 在跑到检查前就挂掉不会产出结果，检查总数会
+  # 「合法地」变低而基线放过它，结果数对不上则一定抓得住。
+  # 首轮按 3 份与保守基线跑，绿了之后按实际结果对齐（制度第 9 步）。
+  report:
+    needs: [test]
+    if: always()
+    uses: distrotwin/buildkit/.github/workflows/report.yml@359ccccaa673bf89b581388ef44fa1ffaad529ea
+    with:
+      distros:  '["v25"]'
+      expected: 3
+      baseline: 105
+
+  publish:
+    needs: [test, report]
+    if: inputs.publish && needs.test.result == 'success' && needs.report.result == 'success'
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { tier: micro, latest: false }
+          - { tier: base,  latest: false }
+          - { tier: devel, latest: true }
+    uses: distrotwin/buildkit/.github/workflows/publish-one.yml@359ccccaa673bf89b581388ef44fa1ffaad529ea
+    with:
+      distro-id:  v25
+      tier:       ${{ matrix.tier }}
+      image:      loongnix
+      tag-prefix: v25
+      arches:     loong64
+      latest:     ${{ matrix.latest }}
